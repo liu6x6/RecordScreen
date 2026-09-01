@@ -32,6 +32,8 @@
 		AA0000010000000000000006 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000006 /* AppLog.swift */; };
 		CE80C7B230466C25001DA23A /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000006 /* AppLog.swift */; };
 		AA0000010000000000000019 /* NativeCameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000019 /* NativeCameraPreview.swift */; };
+		AA0000010000000000000020 /* StreamControlOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000020 /* StreamControlOverlay.swift */; };
+		AA0000010000000000000028 /* StreamSettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000028 /* StreamSettingsScreen.swift */; };
 		CE80C7AD30466C25001DA23A /* RecordScreenShared/Domain/StreamConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000001 /* RecordScreenShared/Domain/StreamConnection.swift */; };
 		CE80C7AE30466C25001DA23A /* RecordScreenShared/Networking/Signaling.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000002 /* RecordScreenShared/Networking/Signaling.swift */; };
 		CE80C7AF30466C25001DA23A /* RecordScreenShared/Theme/Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000010000000000000003 /* RecordScreenShared/Theme/Theme.swift */; };
@@ -55,6 +57,8 @@
 		AA1000010000000000000017 /* RecordScreeniOS/Services/TCPControlClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordScreeniOS/Services/TCPControlClient.swift; sourceTree = SOURCE_ROOT; };
 		AA1000010000000000000018 /* RecordScreeniOS/Services/WebRTCPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordScreeniOS/Services/WebRTCPublisher.swift; sourceTree = SOURCE_ROOT; };
 		AA1000010000000000000019 /* NativeCameraPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordScreeniOS/Components/NativeCameraPreview.swift; sourceTree = SOURCE_ROOT; };
+		AA1000010000000000000020 /* StreamControlOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordScreeniOS/Components/StreamControlOverlay.swift; sourceTree = SOURCE_ROOT; };
+		AA1000010000000000000028 /* StreamSettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordScreeniOS/Screens/StreamSettingsScreen.swift; sourceTree = SOURCE_ROOT; };
 		AA1000010000000000000021 /* RecordScreenMac/RecordScreenMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordScreenMac/RecordScreenMacApp.swift; sourceTree = SOURCE_ROOT; };
 		AA1000010000000000000022 /* RecordScreenMac/Services/ReceiverService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordScreenMac/Services/ReceiverService.swift; sourceTree = SOURCE_ROOT; };
 		AA1000010000000000000023 /* RecordScreenMac/Components/ReceiverStatusCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordScreenMac/Components/ReceiverStatusCard.swift; sourceTree = SOURCE_ROOT; };
@@ -121,6 +125,8 @@
 				AA1000010000000000000017 /* RecordScreeniOS/Services/TCPControlClient.swift */,
 				AA1000010000000000000018 /* RecordScreeniOS/Services/WebRTCPublisher.swift */,
 				AA1000010000000000000019 /* NativeCameraPreview.swift */,
+				AA1000010000000000000020 /* StreamControlOverlay.swift */,
+				AA1000010000000000000028 /* StreamSettingsScreen.swift */,
 			);
 			name = RecordScreeniOS;
 			sourceTree = "<group>";
@@ -248,6 +254,8 @@
 				AA0000010000000000000017 /* RecordScreeniOS/Services/TCPControlClient.swift in Sources */,
 				AA0000010000000000000018 /* RecordScreeniOS/Services/WebRTCPublisher.swift in Sources */,
 				AA0000010000000000000019 /* NativeCameraPreview.swift in Sources */,
+				AA0000010000000000000020 /* StreamControlOverlay.swift in Sources */,
+				AA0000010000000000000028 /* StreamSettingsScreen.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

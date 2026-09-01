@@ -9,6 +9,8 @@ enum AppTheme {
         static let error = SwiftUI.Color.red
         static let live = SwiftUI.Color.red
         static let videoSurface = SwiftUI.Color.black
+        static let overlaySurface = SwiftUI.Color.black.opacity(0.48)
+        static let onVideoText = SwiftUI.Color.white
     }
 
     enum Spacing {
