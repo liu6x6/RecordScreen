@@ -8,6 +8,8 @@ final class ReceiverService: ObservableObject, StreamReceiver {
     @Published private(set) var remoteVideoTrack: RTCVideoTrack?
     @Published private(set) var errorMessage: String?
 
+    var onRemoteVideoTrackChanged: ((RTCVideoTrack?) -> Void)?
+
     private var server: LocalReceiverServer?
     private let webRTCReceiver = WebRTCReceiver()
 
@@ -24,6 +26,7 @@ final class ReceiverService: ObservableObject, StreamReceiver {
         }
         webRTCReceiver.onRemoteVideoTrackChanged = { [weak self] track in
             self?.remoteVideoTrack = track
+            self?.onRemoteVideoTrackChanged?(track)
         }
         webRTCReceiver.onError = { [weak self] error in
             self?.handleConnectionFailure(error)

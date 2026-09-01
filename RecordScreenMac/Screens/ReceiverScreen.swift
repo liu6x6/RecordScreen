@@ -2,9 +2,10 @@ import SwiftUI
 
 struct ReceiverScreen: View {
     @Environment(\.openWindow) private var openWindow
-    @StateObject private var receiver = ReceiverService()
-    @StateObject private var continuityCamera = ContinuityCameraService()
+    @ObservedObject var receiver: ReceiverService
+    @ObservedObject var continuityCamera: ContinuityCameraService
     @ObservedObject var screenCapture: IPhoneScreenCaptureService
+    @ObservedObject var recordingCoordinator: RecordingCoordinator
     @State private var previewSource: PreviewSource = .webRTC
     @State private var isShowingCameraPicker = false
     @State private var isShowingScreenPicker = false
@@ -25,6 +26,7 @@ struct ReceiverScreen: View {
                 Button("Find iPhone Screen", systemImage: "rectangle.on.rectangle") {
                     isShowingScreenPicker = true
                 }
+                recordingButton
                 Button("Start Receiver") {
                     Task {
                         do {
@@ -44,7 +46,10 @@ struct ReceiverScreen: View {
                 }
             }
             .pickerStyle(.segmented)
-            .onChange(of: previewSource) { _, source in
+            .onChange(of: previewSource) { previous, source in
+                Task {
+                    await recordingCoordinator.stopRecording(ifActiveSource: previous.recordingSource)
+                }
                 switch source {
                 case .webRTC:
                     continuityCamera.stop()
@@ -81,9 +86,11 @@ struct ReceiverScreen: View {
                 }
                 .disabled(!receiver.isReceiving)
                 Spacer()
-                Text("LAN video preview only — recording is not available yet.")
+                Text(recordingCoordinator.recordingService.state.statusText)
                     .font(.caption)
                     .foregroundStyle(AppTheme.Color.secondaryText)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.trailing)
             }
         }
         .padding(AppTheme.Spacing.large)
@@ -132,7 +139,30 @@ struct ReceiverScreen: View {
             Text(screenCapture.errorMessage ?? "")
         }
         .onDisappear {
+            Task {
+                await recordingCoordinator.stopRecording()
+            }
             continuityCamera.stop()
+        }
+    }
+
+    @ViewBuilder
+    private var recordingButton: some View {
+        if recordingCoordinator.isRecording(from: previewSource.recordingSource) {
+            Button("Stop Recording", systemImage: "stop.fill") {
+                Task {
+                    await recordingCoordinator.stopRecording()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+        } else {
+            Button("Record", systemImage: "record.circle") {
+                Task {
+                    await recordingCoordinator.startRecording(from: previewSource.recordingSource)
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(recordingCoordinator.recordingService.state.isBusy)
         }
     }
 }
@@ -168,6 +198,15 @@ private enum PreviewSource: String, CaseIterable, Identifiable {
         switch self {
         case .webRTC: "Start the receiver, then connect from the iPhone app."
         case .continuityCamera: "Find and select an iPhone camera connected to this Mac."
+        }
+    }
+
+    var recordingSource: RecordingSource {
+        switch self {
+        case .webRTC:
+            .webRTC
+        case .continuityCamera:
+            .continuityCamera
         }
     }
 }

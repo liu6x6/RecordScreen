@@ -19,10 +19,14 @@ final class IPhoneScreenCaptureService: NSObject, ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var videoSize = CGSize(width: 390, height: 844)
 
+    var onCaptureStateChanged: ((Bool) -> Void)?
+
     private var notificationTokens: [NSObjectProtocol] = []
     private var isActivated = false
+    private var selectedDeviceID: String?
     private let videoOutput = AVCaptureVideoDataOutput()
     private let videoOutputQueue = DispatchQueue(label: "com.example.RecordScreen.iPhoneScreenVideoOutput")
+    private nonisolated let frameDelivery = VideoFrameDelivery()
 
     override init() {
         super.init()
@@ -57,6 +61,10 @@ final class IPhoneScreenCaptureService: NSObject, ObservableObject {
                 position: .unspecified
             )
             devices = discoverySession.devices.map(IPhoneScreenDevice.init(captureDevice:))
+            if let selectedDeviceID, !devices.contains(where: { $0.id == selectedDeviceID }) {
+                AppLog.camera.notice("The active USB iPhone screen device disconnected.")
+                stop()
+            }
             AppLog.camera.info("Found \(self.devices.count, privacy: .public) USB iPhone screen-capture device(s).")
         } catch {
             report(error)
@@ -88,8 +96,10 @@ final class IPhoneScreenCaptureService: NSObject, ObservableObject {
             let dimensions = CMVideoFormatDescriptionGetDimensions(device.captureDevice.activeFormat.formatDescription)
             videoSize = CGSize(width: Int(dimensions.width), height: Int(dimensions.height))
             selectedDeviceName = device.name
+            selectedDeviceID = device.id
             isCapturing = true
             errorMessage = nil
+            onCaptureStateChanged?(true)
             AppLog.camera.info("Started USB iPhone screen preview: \(device.name, privacy: .public).")
         } catch {
             captureSession.commitConfiguration()
@@ -99,6 +109,7 @@ final class IPhoneScreenCaptureService: NSObject, ObservableObject {
     }
 
     func stop() {
+        let wasCapturing = isCapturing
         if captureSession.isRunning {
             captureSession.stopRunning()
         }
@@ -106,11 +117,19 @@ final class IPhoneScreenCaptureService: NSObject, ObservableObject {
         captureSession.outputs.forEach(captureSession.removeOutput)
         videoOutput.setSampleBufferDelegate(nil, queue: nil)
         selectedDeviceName = nil
+        selectedDeviceID = nil
         isCapturing = false
+        if wasCapturing {
+            onCaptureStateChanged?(false)
+        }
     }
 
     func dismissError() {
         errorMessage = nil
+    }
+
+    func setVideoFrameHandler(_ handler: VideoFrameHandler?) {
+        frameDelivery.setHandler(handler)
     }
 
     private func allowScreenCaptureDevices() throws {
@@ -199,6 +218,15 @@ extension IPhoneScreenCaptureService: AVCaptureVideoDataOutputSampleBufferDelega
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            return
+        }
+        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        guard presentationTime.isValid else {
+            return
+        }
+        frameDelivery.deliver(pixelBuffer: pixelBuffer, presentationTime: presentationTime)
+
         guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else {
             return
         }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct IPhoneScreenWindow: View {
     @EnvironmentObject private var screenCapture: IPhoneScreenCaptureService
+    @EnvironmentObject private var recordingCoordinator: RecordingCoordinator
     @State private var rotationQuarterTurns = 0
 
     var body: some View {
@@ -30,8 +31,18 @@ struct IPhoneScreenWindow: View {
             AspectRatioWindowConfigurator(contentSize: displayedVideoSize)
                 .frame(width: 0, height: 0)
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Text(recordingCoordinator.recordingService.state.statusText)
+                .font(.caption)
+                .foregroundStyle(AppTheme.Color.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, AppTheme.Spacing.medium)
+                .padding(.vertical, AppTheme.Spacing.xSmall)
+                .background(.bar)
+        }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                recordingButton
                 Button("Rotate 90 Degrees", systemImage: "rotate.right") {
                     rotationQuarterTurns = (rotationQuarterTurns + 1) % 4
                 }
@@ -39,6 +50,29 @@ struct IPhoneScreenWindow: View {
             }
         }
         .animation(AppTheme.Animation.feedback, value: rotationQuarterTurns)
+        .onDisappear {
+            Task {
+                await recordingCoordinator.stopRecording(ifActiveSource: .iPhoneScreen)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var recordingButton: some View {
+        if recordingCoordinator.isRecording(from: .iPhoneScreen) {
+            Button("Stop Recording", systemImage: "stop.fill") {
+                Task {
+                    await recordingCoordinator.stopRecording(ifActiveSource: .iPhoneScreen)
+                }
+            }
+        } else {
+            Button("Record", systemImage: "record.circle") {
+                Task {
+                    await recordingCoordinator.startRecording(from: .iPhoneScreen)
+                }
+            }
+            .disabled(!screenCapture.isCapturing || recordingCoordinator.recordingService.state.isBusy)
+        }
     }
 
     private var isSideways: Bool {

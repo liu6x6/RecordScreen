@@ -25,7 +25,9 @@ struct ContinuityCameraPickerScreen: View {
                                         try cameraService.start(using: device)
                                         onCameraSelected()
                                     } catch {
-                                        return
+                                        AppLog.camera.error(
+                                            "Could not start selected Continuity Camera: \(error.localizedDescription, privacy: .public)"
+                                        )
                                     }
                                 }
                             }

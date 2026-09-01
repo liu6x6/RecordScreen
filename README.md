@@ -5,7 +5,7 @@ RecordScreen 是一个原生 SwiftUI 双端项目：
 - **iOS**：使用 iPhone 后置摄像头采集视频，通过 WebRTC 推流。
 - **macOS**：在同一局域网发现并接收 iPhone 视频，使用 Metal 实时预览。
 
-当前版本已完成局域网内的设备发现、连接、WebRTC 视频传输与运行日志；尚未完成音频和视频录制。
+当前版本已完成局域网内的设备发现、连接、WebRTC 视频传输、Mac 端视频录制与运行日志；音频尚未实现。
 
 ## 当前能力与边界
 
@@ -18,9 +18,9 @@ RecordScreen 是一个原生 SwiftUI 双端项目：
 | Mac WebRTC 实时预览 | 已完成 | `RTCMTLNSVideoView` 渲染接收到的视频轨道。 |
 | Mac iPhone 直连相机预览 | 已完成 | 使用公开的 AVFoundation `external` 设备发现方式查找并预览可用 iPhone 摄像头。 |
 | Mac USB iPhone 屏幕预览 | 已完成 | 启用 CoreMediaIO 屏幕采集设备后，以 `external + muxed` 发现并预览 USB 连接的 iPhone 屏幕。 |
-| 运行日志 | 已完成 | `camera`、`discovery`、`signaling`、`webrtc` 四个分类。 |
+| Mac 手动视频录制 | 已完成 | 支持 WebRTC、Continuity Camera 与 USB iPhone 屏幕；输出单视频流 H.264 MOV。 |
+| 运行日志 | 已完成 | `camera`、`discovery`、`signaling`、`webrtc`、`recording` 五个分类。 |
 | 音频 | 未实现 | 当前仅发送视频。 |
-| Mac 自动录制 | 未实现 | 后续使用 `AVAssetWriter` 实现。 |
 | 外网连接 | 未实现 | 当前没有配置 STUN/TURN，仅适用于同一局域网。 |
 | 配对/认证 | 未实现 | 局域网中发现服务即可连接，不应直接用于不可信网络。 |
 | 多 iPhone | 未实现 | Mac 收到第二个 TCP 连接时会拒绝它，以保护现有连接。 |
@@ -73,6 +73,14 @@ Continuity Camera 的发现必须使用 `AVCaptureDevice.DiscoverySession` 的 `
 
 屏幕源使用 `AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .muxed, ...)`。不要将其与 Continuity Camera 的 `.video` 发现路径混用：前者是 USB iPhone **屏幕**，后者是 iPhone **摄像头**。首次使用时 macOS 会请求相机与麦克风权限，因为 USB 屏幕设备以 muxed 音视频源形式出现；当前应用仅显示视频，不会处理或保存音频。
 
+### Mac 视频录制
+
+在主接收窗口中选择 **WebRTC Stream** 或 **iPhone Camera** 后，点击 **Record**；USB iPhone 屏幕则在独立 **iPhone Screen** 窗口的工具栏中点击 **Record**。录制仅在用户手动点击时开始，且任一时刻只能录制一个来源；开始接收或打开预览不会自动录制。
+
+文件为**无音频、单视频流、H.264 编码的 MOV**，保存到 `~/Documents/RecordScreen/RecordScreen-<timestamp>-<UUID>.mov`。写入期间使用同目录的唯一 `*.partial` 文件，仅在 `AVAssetWriter.finishWriting` 成功后才移动为最终 `.mov`，绝不会覆盖已有文件。开始前会创建目录并要求至少 **500 MB** 可用空间；空间不足、编码失败或完成失败会显示录制状态并删除临时输出。录制完成状态和 `recording` 日志会显示完整的 `~/Documents/...` 文件路径。
+
+编码器会在收到第一帧后按该帧真实宽高创建，因此状态会短暂显示“Waiting for the first video frame”。为避免阻塞 WebRTC 渲染或 AVCapture 回调，背压时会丢弃帧并在 `recording` 日志中节流记录。录制中若来源停止、窗口关闭或 WebRTC 视频轨道消失，会停止接收新帧并正常完成已有内容。AVAssetWriter 不能在同一文件内改变视频尺寸；来源在录制中改变分辨率时，会结束当前文件，用户可重新开始录制。旋转 USB 屏幕窗口只影响预览显示，录制保留设备输出的原始方向。
+
 ## 架构与数据流
 
 ```text
@@ -102,6 +110,9 @@ Continuity Camera 的发现必须使用 `AVCaptureDevice.DiscoverySession` 的 `
 │  └─ IPhoneScreenPickerScreen ── USB iPhone 屏幕选择界面                │
 │  ├─ IPhoneScreenWindow ── 独立窗口、旋转与视频展示                     │
 │  └─ AspectRatioWindowConfigurator ── 内容比例与初始窗口尺寸             │
+│  ├─ RecordingCoordinator ── 选择活动来源、挂接/卸载帧回调              │
+│  ├─ RecordingService ── 首帧建 H.264 AVAssetWriter、临时文件完成写入   │
+│  └─ WebRTCRecordingRenderer ── 将 RTCCVPixelBuffer 交给录制协调器     │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -157,7 +168,11 @@ RecordScreenMac/
     ├── IPhoneScreenPickerScreen.swift       # USB 屏幕选择界面
     ├── LocalReceiverServer.swift          # Bonjour/TCP 信令服务端
     ├── ReceiverService.swift              # Mac 连接与预览状态协调
-    └── WebRTCReceiver.swift               # Mac WebRTC 接收端
+    ├── WebRTCReceiver.swift               # Mac WebRTC 接收端
+    ├── RecordingCoordinator.swift         # 单来源录制协调
+    ├── RecordingService.swift             # H.264 MOV Writer 生命周期
+    ├── WebRTCRecordingRenderer.swift      # WebRTC CVPixelBuffer bridge
+    └── VideoFrameDelivery.swift           # 线程安全帧回调分发
 ```
 
 共享目录的 Swift 文件以源文件形式编入两个 App Target，**不是独立 Swift Package**。新增共享文件时，必须同时添加到 iOS 和 macOS Target 的 Compile Sources。
@@ -186,6 +201,7 @@ USB Screen 不显示在主接收器的预览区。`IPhoneScreenCaptureService` �
 | `discovery` | Bonjour 浏览启动、发现 Mac 数量、浏览器失败 |
 | `signaling` | TCP 建立、`hello` / `ack`、SDP / ICE 消息、断开与解析失败 |
 | `webrtc` | Peer Connection、Offer/Answer、ICE 状态、视频轨道到达 |
+| `recording` | 录制准备、首帧 Writer 创建、节流后的丢帧、完成、临时文件清理和错误 |
 
 Mac 上可使用：
 
@@ -231,6 +247,9 @@ Mac remote video track received.
 - Remote Description 设置完成前收到的 ICE Candidate 必须暂存，完成后再添加。
 - TCP 信令保持单条活动连接，Mac 不得用新入站连接静默覆盖已连接的 iPhone。
 - WebRTC delegate 回调不是主线程回调；入口使用 `nonisolated`，只有 UI 状态更新才切换回 `@MainActor`。
+- Mac 录制只能由 `RecordingCoordinator` 选择一个活动来源；不要在 SwiftUI View、`WebRTCReceiver` 或 AVCapture service 中创建/操作 `AVAssetWriter`。AVCapture service 仅通过帧回调提供 `CVPixelBuffer` 与 PTS。
+- WebRTC 录制 renderer 只在录制 WebRTC 时挂接到 `RTCVideoTrack`，并且只能安全处理 `RTCCVPixelBuffer`；它不得影响 `RemoteVideoView` 的独立预览 renderer。
+- 录制必须先写入 `*.partial`，在完成成功后移动到 `~/Documents/RecordScreen` 的唯一最终文件；不得覆盖、保留失败临时文件，或在捕获/渲染回调中等待 writer。
 - 不使用 `try!`、强制解包或 `as!`；网络、相机、编码和文件写入错误必须更新状态并记录日志。
 - 任何动态 Framework 依赖都要同时满足链接、嵌入和 rpath。当前工程已配置 `WebRTC.framework` 的运行路径，勿删除 `LD_RUNPATH_SEARCH_PATHS`。
 
@@ -245,13 +264,11 @@ Mac remote video track received.
 - Mac 接收并监听远端音频轨道。
 - 验证音视频同步、蓝牙设备切换和中断恢复。
 
-### 2. Mac 自动录制
+### 2. Mac 录制库与增强
 
-- 新建独立的 `RecordingService`，不要把 `AVAssetWriter` 逻辑放进 SwiftUI View 或 `WebRTCReceiver`。
-- 将接收的视频和音频帧按统一时间戳写入 `AVAssetWriter`。
-- 使用临时文件写入，完成后原子移动至目标目录。
-- 实现开始、停止、WebRTC 断开、磁盘不足、写入失败和清理损坏文件。
-- 明确文件格式、保存目录、录像库 UI 和空间预警策略。
+- 增加已完成录制的浏览、播放、删除和 Finder 定位界面。
+- 在保持视频录制可靠性的前提下，增加可选音频轨道和同步策略。
+- 增加可配置的磁盘空间预警与保留策略。
 
 ### 3. 连接安全与可靠性
 

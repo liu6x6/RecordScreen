@@ -25,7 +25,9 @@ struct IPhoneScreenPickerScreen: View {
                                         try screenCaptureService.start(using: device)
                                         onScreenSelected()
                                     } catch {
-                                        return
+                                        AppLog.camera.error(
+                                            "Could not start selected USB iPhone screen: \(error.localizedDescription, privacy: .public)"
+                                        )
                                     }
                                 }
                             }
