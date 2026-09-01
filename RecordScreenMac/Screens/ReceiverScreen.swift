@@ -1,10 +1,13 @@
 import SwiftUI
 
 struct ReceiverScreen: View {
+    @Environment(\.openWindow) private var openWindow
     @StateObject private var receiver = ReceiverService()
     @StateObject private var continuityCamera = ContinuityCameraService()
+    @ObservedObject var screenCapture: IPhoneScreenCaptureService
     @State private var previewSource: PreviewSource = .webRTC
     @State private var isShowingCameraPicker = false
+    @State private var isShowingScreenPicker = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
@@ -18,6 +21,9 @@ struct ReceiverScreen: View {
                 Spacer()
                 Button("Find iPhone Camera", systemImage: "iphone.and.arrow.forward") {
                     isShowingCameraPicker = true
+                }
+                Button("Find iPhone Screen", systemImage: "rectangle.on.rectangle") {
+                    isShowingScreenPicker = true
                 }
                 Button("Start Receiver") {
                     Task {
@@ -39,8 +45,12 @@ struct ReceiverScreen: View {
             }
             .pickerStyle(.segmented)
             .onChange(of: previewSource) { _, source in
-                if source == .webRTC {
+                switch source {
+                case .webRTC:
                     continuityCamera.stop()
+                    screenCapture.stop()
+                case .continuityCamera:
+                    screenCapture.stop()
                 }
             }
 
@@ -53,11 +63,9 @@ struct ReceiverScreen: View {
                     RemoteVideoView(videoTrack: remoteVideoTrack)
                 } else {
                     ContentUnavailableView(
-                        previewSource == .webRTC ? "No WebRTC Video" : "No iPhone Camera Selected",
-                        systemImage: previewSource == .webRTC ? "video.slash" : "iphone.slash",
-                        description: Text(previewSource == .webRTC
-                            ? "Start the receiver, then connect from the iPhone app."
-                            : "Find and select an iPhone camera connected to this Mac."
+                        previewSource.emptyStateTitle,
+                        systemImage: previewSource.emptyStateIcon,
+                        description: Text(previewSource.emptyStateDescription
                         )
                     )
                     .foregroundStyle(.white)
@@ -89,6 +97,16 @@ struct ReceiverScreen: View {
                 onDismiss: { isShowingCameraPicker = false }
             )
         }
+        .sheet(isPresented: $isShowingScreenPicker) {
+            IPhoneScreenPickerScreen(
+                screenCaptureService: screenCapture,
+                onScreenSelected: {
+                    isShowingScreenPicker = false
+                    openWindow(id: "iphone-screen")
+                },
+                onDismiss: { isShowingScreenPicker = false }
+            )
+        }
         .alert("Receiver Error", isPresented: Binding(
             get: { receiver.errorMessage != nil },
             set: { if !$0 { receiver.dismissError() } }
@@ -104,6 +122,14 @@ struct ReceiverScreen: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(continuityCamera.errorMessage ?? "")
+        }
+        .alert("iPhone Screen Error", isPresented: Binding(
+            get: { screenCapture.errorMessage != nil },
+            set: { if !$0 { screenCapture.dismissError() } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(screenCapture.errorMessage ?? "")
         }
         .onDisappear {
             continuityCamera.stop()
@@ -121,6 +147,27 @@ private enum PreviewSource: String, CaseIterable, Identifiable {
         switch self {
         case .webRTC: "WebRTC Stream"
         case .continuityCamera: "iPhone Camera"
+        }
+    }
+
+    var emptyStateTitle: String {
+        switch self {
+        case .webRTC: "No WebRTC Video"
+        case .continuityCamera: "No iPhone Camera Selected"
+        }
+    }
+
+    var emptyStateIcon: String {
+        switch self {
+        case .webRTC: "video.slash"
+        case .continuityCamera: "iphone.slash"
+        }
+    }
+
+    var emptyStateDescription: String {
+        switch self {
+        case .webRTC: "Start the receiver, then connect from the iPhone app."
+        case .continuityCamera: "Find and select an iPhone camera connected to this Mac."
         }
     }
 }

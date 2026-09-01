@@ -17,6 +17,7 @@ RecordScreen 是一个原生 SwiftUI 双端项目：
 | WebRTC 视频 | 已完成 | iPhone 创建 Offer，Mac 创建 Answer，双方交换 ICE Candidate。 |
 | Mac WebRTC 实时预览 | 已完成 | `RTCMTLNSVideoView` 渲染接收到的视频轨道。 |
 | Mac iPhone 直连相机预览 | 已完成 | 使用公开的 AVFoundation `external` 设备发现方式查找并预览可用 iPhone 摄像头。 |
+| Mac USB iPhone 屏幕预览 | 已完成 | 启用 CoreMediaIO 屏幕采集设备后，以 `external + muxed` 发现并预览 USB 连接的 iPhone 屏幕。 |
 | 运行日志 | 已完成 | `camera`、`discovery`、`signaling`、`webrtc` 四个分类。 |
 | 音频 | 未实现 | 当前仅发送视频。 |
 | Mac 自动录制 | 未实现 | 后续使用 `AVAssetWriter` 实现。 |
@@ -64,6 +65,14 @@ Continuity Camera 的发现必须使用 `AVCaptureDevice.DiscoverySession` 的 `
 
 选择设备时必须遵循 AVFoundation 会话顺序：`beginConfiguration` → 添加输入与设置 preset → `commitConfiguration` → `startRunning`。在 `beginConfiguration` 和 `commitConfiguration` 之间调用 `startRunning` 会触发 `NSGenericException` 并终止 App。
 
+### 使用 USB iPhone Screen
+
+在 Mac App 点击 **Find iPhone Screen**。应用会在启动后尽早启用 `kCMIOHardwarePropertyAllowScreenCaptureDevices`，预热设备发现，并监听连接/断开通知。将 iPhone 通过 USB 连接、解锁并信任 Mac 后，等待数秒或点击 **Refresh**；在列表点击 **Show Screen** 会打开独立的 **iPhone Screen** 窗口。
+
+该窗口先使用 iPhone 屏幕捕获设备的 `activeFormat` 设置初始内容尺寸，再在首个 `CMSampleBuffer` 到达时按实际视频帧宽高更新窗口比例。窗口可自由缩放，但 `contentAspectRatio` 会始终保持视频比例。点击窗口工具栏的 **Rotate 90 Degrees** 可顺时针旋转画面，旋转时会同步交换窗口宽高约束。
+
+屏幕源使用 `AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .muxed, ...)`。不要将其与 Continuity Camera 的 `.video` 发现路径混用：前者是 USB iPhone **屏幕**，后者是 iPhone **摄像头**。首次使用时 macOS 会请求相机与麦克风权限，因为 USB 屏幕设备以 muxed 音视频源形式出现；当前应用仅显示视频，不会处理或保存音频。
+
 ## 架构与数据流
 
 ```text
@@ -89,6 +98,10 @@ Continuity Camera 的发现必须使用 `AVCaptureDevice.DiscoverySession` 的 `
 │  └─ RemoteVideoView ── RTCMTLNSVideoView Metal 渲染                    │
 │  ├─ ContinuityCameraService ── 查找与管理 iPhone Continuity Camera    │
 │  └─ ContinuityCameraPreview ── AVCaptureVideoPreviewLayer 渲染         │
+│  ├─ IPhoneScreenCaptureService ── CoreMediaIO USB 屏幕设备发现/采集    │
+│  └─ IPhoneScreenPickerScreen ── USB iPhone 屏幕选择界面                │
+│  ├─ IPhoneScreenWindow ── 独立窗口、旋转与视频展示                     │
+│  └─ AspectRatioWindowConfigurator ── 内容比例与初始窗口尺寸             │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -139,6 +152,9 @@ RecordScreenMac/
 ├── Screens/ReceiverScreen.swift           # Mac 接收端界面
 └── Services/
     ├── ContinuityCameraService.swift       # iPhone 直连摄像头发现与采集
+    ├── IPhoneScreenCaptureService.swift    # USB iPhone 屏幕发现与采集
+    ├── IPhoneScreenWindow.swift             # 独立屏幕预览窗口
+    ├── IPhoneScreenPickerScreen.swift       # USB 屏幕选择界面
     ├── LocalReceiverServer.swift          # Bonjour/TCP 信令服务端
     ├── ReceiverService.swift              # Mac 连接与预览状态协调
     └── WebRTCReceiver.swift               # Mac WebRTC 接收端
@@ -154,7 +170,9 @@ RecordScreenMac/
 - 颜色、间距、圆角、动画使用 `AppTheme`；不要在 Screen 直接硬编码设计值。
 - 原生预览和 WebRTC 采集不能长期并发占用同一摄像头。开始推流前停止 `CameraCaptureService` 预览；停止推流后恢复预览。
 
-Mac 的 WebRTC 与 Continuity Camera 可以同时保持连接/采集能力，但预览区域每次只显示一个来源；切换来源不得停止 WebRTC Receiver 服务或断开已建立的 iPhone 推流。
+Mac 的 WebRTC、Continuity Camera 与 USB Screen 是可切换的预览来源。预览区域每次只显示一个来源；切换到 WebRTC 不得停止 WebRTC Receiver 服务或断开已建立的 iPhone 推流。切换到本地摄像头或 USB 屏幕来源时，必须停止另一个本地采集会话，避免同一 iPhone 的硬件资源争用。
+
+USB Screen 不显示在主接收器的预览区。`IPhoneScreenCaptureService` 必须作为 `RecordScreenMacApp` 的共享 `StateObject` 注入主窗口和 `WindowGroup(id: "iphone-screen")`；否则新窗口会持有不同的 `AVCaptureSession`，无法显示已选屏幕。
 
 `ContinuityCameraPickerScreen` 是 macOS Sheet，必须保留最小尺寸；`List` 在没有显式可用高度时可能被压缩到零高度，只显示标题和工具栏、却不显示已发现设备。
 
